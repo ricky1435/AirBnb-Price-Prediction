@@ -1,0 +1,411 @@
+---
+title: "Something fascinating"
+author: "Jenny Bryan"
+date: "`r format(Sys.Date())`"
+output:
+  github_document: default
+  '': default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r }
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(gridExtra)
+library(moments)
+library(DescTools)
+library(viridis)
+library(hrbrthemes)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+# Reading the data into RStudio
+raw_data<- read.csv('/Users/ruthvikpvs/Desktop/Projects/Airbnb New York/AB_NYC_2020.csv')
+# Copying the data into another variable
+data <- raw_data
+# Structure of the data set
+str(data)
+```
+
+# Descriptive Statistics
+
+```{r}
+library(psych)
+psych::describe(data)
+```
+
+```{r}
+# The id column and host_id columns are not necessary. As the host name is same as host_id for all
+# observations present in the data set. Removing these two will now have any affect on analysis.
+data <- data %>%
+  select(-c(id,host_id))
+# Removing last_review column
+data <- data %>% 
+  select(-c(last_review))
+```
+
+The host listings were already calculated and are given as a separate feature. Which host listed the most number of Apartments and in Which place?
+# Hosts names and their listings 
+```{r}
+host.name <- data %>%
+  group_by(host_name) %>%
+  summarise(Count.names = n()) %>% arrange(desc(Count.names)) %>%
+  head(10)
+host.name
+```
+ Michael had the highest number of listings in the Airbnb data with 417 listings.
+
+How much is the total listings worth by Michael (if all the rooms listed by Michael was booked how much will he earn?)
+```{r}
+data %>%
+  filter(host_name=='Michael')
+```
+
+z
+```{r}
+michael.earnings <- data %>%
+  filter(host_name == 'Michael') %>%
+  group_by(host_name) %>%
+  summarise(Earnings = sum(price))
+michael.earnings
+```
+
+If everything were to be sold, Michael would have earned 66895$ 
+
+
+# Checking for missing values in the data
+```{r}
+# Checking for missing values in the data
+colSums(is.na(data))
+```
+# Removing any duplicate columns in the data.
+```{r}
+data <- data %>%
+  distinct()
+nrow(data)
+```
+
+Only reviews_per_month column contains missing values. 20% of the values are missing from this specific column. But this column is important because, reviews per month may play an important factor while predicting Airbnb prices.
+Looking closely at the data we observe that reviews_per_month = 0 only when number of reviews are 0.
+Filling this column with the value 0.
+```{r}
+data$reviews_per_month <- data$reviews_per_month %>%
+  replace_na(0)
+```
+
+# Relationships between the variables in the data. Correlataion Plot
+
+```{r}
+library(corrplot)
+library(GGally)
+data.numeric <- data %>%
+  select(c(latitude,longitude,price,minimum_nights,number_of_reviews,reviews_per_month,calculated_host_listings_count,availability_365))
+correlation <- cor(data.numeric)
+corrplot(correlation,order='hclust')
+```
+
+
+#How is the price of rooms distributed in the data.
+
+```{r}
+plot1<-ggplot(data, aes(x=price)) +
+  geom_histogram(fill="#69b3a2", color="black", alpha=0.8) + 
+  labs(title = 'Distribution of Price',x='Price of Rooms in $',y='Distribution')
+ggplotly(plot1)
+```
+The distribution is heavily right skewed. 
+The observations are not clear. Looking at the prices below 1000 will say if the prices are really 0 for more than 30 thousand observations.
+
+# Histogram of price <500
+```{r}
+plot2 <- data %>%
+  filter(price < 500) %>%
+  ggplot(aes(x=price))+geom_histogram(fill="#69b3a2", color="black", alpha=0.5)+
+  labs(title='Prices less than 500',x='Price in $')
+ggplotly(plot2)
+```
+When we see the distribution clearly, we can observe that most of the house listings are below 60$.
+
+# Relationship between the nights and price wrt room type.
+
+```{r}
+z<-ggplot(data,aes(x=price,y=minimum_nights,color=room_type))+geom_point()+labs(title='Relationship between Price and Minimum Nights')
+z
+```
+
+# Count of listings of room_type in New York.
+  
+```{r}
+room.type<-ggplot(data,aes(y=room_type))+geom_bar( fill=rgb(0.1,0.4,0.5))+labs(title='Number of Listings of room_types',x='Number of Listings',y='Room Type')
+ggplotly(room.type)
+```
+People are looking for Entire Home/Apartment or Private Rooms while booking for a house. Very few people want to share a room with an unknown person.
+# How are the prices distributed for these rooms?
+
+```{r}
+freq_location <- data.frame(cbind(Frequency = table(data$room_type), Percent = prop.table(table(data$room_type)) * 100))
+freq_location <- freq_location[order(freq_location$Frequency),]
+freq_location
+```
+
+1) 2.3% of the total listings are of Shared rooms
+2) 45.6% of the total room listings are for Private rooms
+3) 52% of the total listings are for Entire home/apt
+
+# Total prices of these room types
+
+```{r}
+room_prices <- data %>%
+  group_by(room_type) %>%
+  summarise(Prices = sum(price)) %>%
+  mutate(Percentage = Prices/sum(Prices)*100)
+room_prices
+
+```
+
+1) 72% of the entire price listing of Airbnb is from Entire home/apt.
+2) 26% is from Private room
+3) Only 1 % from Shared rooms.
+This is to be expected because the count of rooms are different for different types.
+
+```{r}
+str(data)
+```
+
+# How are the rooms listed in Newyork city
+```{r}
+new.york<-ggplot(data,aes(x=latitude,y=longitude,color=neighbourhood_group))+geom_point()+
+  scale_color_brewer(palette = "Spectral")+labs(title='Neighbourhood group listings in New York')
+ggplotly(new.york)
+```
+
+# New York City and Availability
+```{r}
+new.york1<-ggplot(data,aes(x=latitude,y=longitude,color=availability_365))+geom_point()
+new.york1
+```
+
+# Neighbourhood group
+
+```{r}
+neighbour_group <- data %>%
+  group_by(neighbourhood_group,room_type) %>%
+  summarize(Counts = n())
+ggplot(neighbour_group,aes(y=neighbourhood_group,x=Counts))+geom_bar(stat='identity', fill=rgb(0.1,0.4,0.5))+labs(title='Neighbourhood groups count',x='Frequency',y='Neighbourhood group')
+```
+
+
+Brooklyn and Manhattan areas show the highest number of listings in New York City.
+```{r}
+plot_neigh<-ggplot(neighbour_group,aes(x=Counts,y=neighbourhood_group,fill=room_type))+geom_bar(stat='identity',position='dodge')+labs(title='Count of Neighbourhood group by apartment')+scale_fill_viridis(discrete = T,option = "E")
+ggplotly(plot_neigh)
+
+```
+
+1) Manhattan area had the highest listings of Airbnb Entire home/apt rooms.
+2) Brooklyn area observed highest number of private rooms.
+3) Rest of the counts are not that significant because they are very less in size.
+
+# Relationship between neighbourhood_group and availability.
+```{r}
+ggplot(data,aes(x=neighbourhood_group,y=availability_365,fill=neighbourhood_group))+geom_boxplot()
+  
+```
+
+# Neighbourhood Group and Price
+
+```{r}
+price.500 <- data %>%
+  filter(price <500)
+ggplot(price.500,aes(x=neighbourhood_group,y=price,fill=neighbourhood_group))+geom_violin()
+
+```
+
+# How many rooms are available 365 days of the year?
+```{r}
+nrow (data %>%
+  filter(availability_365==365))
+```
+1295 rooms are available 365 days of the year. How are prices distributed for these rooms (pries less than 500)?
+```{r}
+rooms.365 <- data %>%
+  filter(availability_365==365 & price <500)
+hist1<-ggplot(rooms.365,aes(x=price))+geom_histogram(binwidth = 50)
+ggplotly(hist1)
+```
+
+# Creating Word Cloud for most used words in name column
+```{r}
+library(tm)
+library(wordcloud)
+library(RColorBrewer)
+#Create a vector containing only the text
+text <- data$name
+# Create a corpus  
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+df <- data.frame(word = names(words),freq=words)
+```
+# Creating the word cloud
+```{r}
+set.seed(1234) # for reproducibility 
+wordcloud(words = df$word, freq = df$freq, min.freq = 1,           max.words=200, random.order=FALSE, rot.per=0.35,            colors=brewer.pal(8, "Dark2"))
+```
+# Top ten neighbourhood where rooms are available. Each listing in the data is a seperate room.
+```{r}
+
+neighbour.count <- data.frame(data %>%
+  group_by(neighbourhood) %>%
+  summarise(Count=n()) %>%
+  arrange(desc(Count)) )
+head(neighbour.count,10)
+```
+Most of the listings are in Williamsburg followed by Bedford-Stuyvesant, Harlem and Bushwick.
+
+# Minimum price/ amount required to rent a room.
+
+Creating this additional column is necessary because the minimum_nights column means that the person cannot rent a house until and unless he is going to rent that house for that number of nights.
+```{r}
+data$total_price <- data$minimum_nights*data$price
+ggplot(data,aes(x=total_price))+geom_boxplot()+labs(title='Boxplot of Total Price',x='Total price in $')
+```
+# What is the value of 75th percentile in the data?
+```{r}
+data <- data %>%
+  arrange(desc(data$total_price,false))
+quartile.3rd <- 3*((48895+1)/4)
+
+```
+
+
+```{r}
+data1 <- data %>%
+  filter(data$total_price >= data$total_price[quartile.3rd])
+nrow(data1)
+```
+# Predicting the rental price of an Airbnb room using multilinear regression.
+As the data contains categorical variables, the first step is to perform one hot encoding to convert it to numerical variables as a machine learning model does not accept categorical data.
+```{r}
+# Removing few unnecessary columns
+data <- data %>%
+  select(-c(name,host_name,reviews_per_month))
+```
+
+```{r}
+data <-data%>%mutate_if(is.numeric,scale)
+```
+
+
+```{r}
+library(caret)
+dummy <- dummyVars(" ~ .", data=data)
+#perform one-hot encoding on data frame
+final_df <- data.frame(predict(dummy, newdata=data))
+smp_size <- floor(0.75 * nrow(final_df))
+
+## set the seed to make your partition reproducible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(final_df)), size = smp_size)
+
+train <- final_df[train_ind, ]
+test <- final_df[-train_ind, ]
+```
+
+
+```{r}
+model1 <- lm(total_price ~ .,data=train)
+summary(model1)
+```
+```{r}
+plot(model1)
+```
+1) Looking at the above plots we can infer that linear regression is not a correct fit for our data. 2) There are many observations above Quartile 3 but we cannot remove these observations because those belong to specific rooms/houses. If we remove observations then the model is trained on wrong data and the predictions will not be accurate.
+3) Even though the variables were standardized, the normality assumption is getting violated. So, this model is not correct for our data. Predicting the test set is not worth it because the training accuracy is so low.
+
+# For random forest, I will remove the neighbourhood column because we already have neighbourhood group. Will split the data, train and test the model again.
+```{r}
+data <- data %>%
+  select(-c(neighbourhood))
+```
+
+```{r}
+dummy1 <- dummyVars(" ~ .", data=data)
+#perform one-hot encoding on data frame
+final_df1 <- data.frame(predict(dummy1, newdata=data))
+str(final_df1)
+sample_size = round(nrow(final_df1)*.70) # setting what is 70%
+index <- sample(seq_len(nrow(final_df1)), size = sample_size)
+train1 <- final_df1[index, ]
+test1 <- final_df1[-index, ]
+```
+
+```{r}
+sum(is.na(test1))
+```
+
+
+```{r}
+model2 <- lm(total_price ~ .,data=train1)
+summary(model2)
+```
+Observations:
+After removing the neighbourhood feature, there is no improvement in the model's R2 and adjusted R2. 
+```{r}
+plot(model2)
+```
+
+```{r}
+options(warn=-1)      #turn off warnings
+predictions <- predict(model2,test1)
+```
+
+
+
+# Random Forest Algorithm
+```{r}
+library(randomForest)
+rf <- randomForest(total_price ~., data=train1, ntree= 100, mtry=3, importance= TRUE)
+rf
+print(rf)
+```
+```{r}
+plot(rf)
+```
+
+
+```{r}
+#predict on the test data using the model built above
+p1<-predict(rf,test1)
+
+#performance evaluation
+pres= postResample(pred=p1, obs=test1$total_price)
+pres
+```
+The adjust R2 value has increased from 0.3 to 0.5 when we used random forest to train the mode and the Root mean squared error is 0.41044. This model is slightly better than multi linear regression but we still cannot keep this model into production.
+
+```{r}
+varImpPlot(rf)
+
+```
+
+
+
